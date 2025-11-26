@@ -38,7 +38,7 @@ import {
   Loader2,
   AlertTriangle,
   Activity,
-  Link,
+  Link as LinkIcon,
   Unlink
 } from 'lucide-react'
 
@@ -633,7 +633,7 @@ function TaskFitnessMapping({
               onClick={handleCreate}
               disabled={isLoading || !activityType || !metric}
             >
-              <Link className="w-4 h-4" />
+              <LinkIcon className="w-4 h-4" />
             </Button>
           )}
         </div>
