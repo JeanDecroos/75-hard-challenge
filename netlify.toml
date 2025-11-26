@@ -1,0 +1,23 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_APP_URL"
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[redirects]]
+  from = "/_next/image"
+  query = { q = ":quality", url = ":url", w = ":width" }
+  to = "/.netlify/images?url=:url&w=:width&q=:quality"
+  status = 200
+
+[[redirects]]
+  from = "/_ipx/*"
+  query = { q = ":quality", url = ":url", w = ":width" }
+  to = "/.netlify/images?url=:url&w=:width&q=:quality"
+  status = 200
