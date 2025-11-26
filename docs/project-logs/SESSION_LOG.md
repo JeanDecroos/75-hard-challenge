@@ -381,6 +381,135 @@ Created `docs/project-logs/` folder with:
 
 ---
 
+## Session 4 - November 27, 2025
+
+### Console Error Investigation and Build Fix
+
+**Duration:** ~15 minutes
+**AI Model:** Grok (grok-code-fast-1)
+
+---
+
+### Issue: Build Failing with Console Errors
+
+> I can't see the branch on Netlify
+> can you have a look at the console?
+
+**What was done:**
+
+1. **Console Investigation**
+   - Identified development server was running properly on localhost:3000
+   - Found build error during static generation: `Strava API error: Dynamic server usage: Page couldn't be rendered statically because it used cookies`
+   - Discovered this was preventing successful Netlify deployments
+
+2. **Root Cause Analysis**
+   - Issue in `src/lib/supabase/server.ts` where `cookies()` was called at module level
+   - Next.js static generation cannot handle `cookies()` during build time (only available during request handling)
+   - This caused "Dynamic server usage" error in all static page generation
+
+3. **Fix Implementation**
+   - Moved `cookies()` calls inside individual cookie methods instead of module initialization
+   - Wrapped cookie operations in try-catch blocks for safety during build time
+   - Ensured cookies are only accessed during actual request handling, not static generation
+
+**Code Changes:**
+```typescript
+// Before (BROKEN - Caused build errors):
+export function createClient() {
+  const cookieStore = cookies() // ❌ Called during build time
+  return createServerClient(/*...*/)
+}
+
+// After (FIXED - Build successful):
+export function createClient() {
+  return createServerClient(/*...*/, {
+    cookies: {
+      get(name: string) {
+        try {
+          const cookieStore = cookies() // ✅ Called only during requests
+          return cookieStore.get(name)?.value
+        } catch {
+          return undefined
+        }
+      },
+      set(name: string, value: string, options) {
+        try {
+          const cookieStore = cookies()
+          cookieStore.set({ name, value, ...options })
+        } catch {
+          // Handle build-time gracefully
+        }
+      },
+      remove(name: string, options) {
+        try {
+          const cookieStore = cookies()
+          cookieStore.set({ name, value: '', ...options })
+        } catch {
+          // Handle build-time gracefully
+        }
+      },
+    }
+  })
+}
+```
+
+**Files changed:**
+- `src/lib/supabase/server.ts` - Fixed dynamic server usage with cookies
+
+**Issues encountered:**
+- Build was failing silently with dynamic server usage errors
+- Error only appeared during static generation phase, not during development
+- Required understanding of Next.js static vs dynamic rendering differences
+- Netlify deployment was blocked by this build error
+
+**Result:**
+- ✅ Build now completes successfully without console errors
+- ✅ No more "Dynamic server usage" errors during static generation
+- ✅ Strava integration APIs work properly without build conflicts
+- ✅ Static generation works correctly for all pages
+- ✅ Netlify deployment is now possible
+
+**Technical Notes:**
+- Next.js static generation runs at build time and cannot access runtime features like cookies
+- API routes are dynamic and can access cookies during request handling
+- The fix ensures cookies are only accessed when actually needed (during requests)
+- Build-time safety is maintained with try-catch blocks
+
+---
+
+## Session 5 - November 27, 2025
+
+### Documentation Update
+
+**Duration:** ~5 minutes
+**AI Model:** Grok (grok-code-fast-1)
+
+---
+
+### Prompt: Add Conversation to Logs
+
+> add the conversation to the docs logs
+
+**What was done:**
+
+1. **Session Documentation**
+   - Added Session 4: Console Error Investigation and Build Fix
+   - Documented the dynamic server usage error and resolution
+   - Added technical details about Next.js static generation constraints
+   - Included code examples of the fix
+
+2. **Documentation Standards**
+   - Followed established format for session logging
+   - Included prompts, what was done, files changed, issues encountered
+   - Added technical context for future reference
+
+**Files changed:**
+- `docs/project-logs/SESSION_LOG.md` - Added Session 4 documentation
+
+**Result:** Project logs are now complete and up-to-date with all recent development work
+
+---
+
 ## Template for Future Sessions
 
 Copy this template for new sessions:
