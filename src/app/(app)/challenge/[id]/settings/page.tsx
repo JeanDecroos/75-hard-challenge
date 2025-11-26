@@ -25,7 +25,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { useChallenge, useUpdateChallenge, useRegenerateInviteToken } from '@/hooks/use-challenges'
 import { useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/use-tasks'
 import type { Task } from '@/types'
-import {
+import { 
   ArrowLeft,
   Settings,
   Plus,

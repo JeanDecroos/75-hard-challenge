@@ -11,7 +11,7 @@ export function createClient() {
         get(name: string) {
           try {
             const cookieStore = cookies()
-            return cookieStore.get(name)?.value
+          return cookieStore.get(name)?.value
           } catch {
             return undefined
           }

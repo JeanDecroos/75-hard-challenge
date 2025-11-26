@@ -15,7 +15,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useStravaStatus, useStravaAuthorize, useStravaDisconnect, useStravaSync } from '@/hooks/use-fitness'
 import { createClient } from '@/lib/supabase/client'
 import { timezones } from '@/lib/utils'
-import {
+import { 
   ArrowLeft,
   User,
   Bell,
