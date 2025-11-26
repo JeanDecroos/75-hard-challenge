@@ -268,32 +268,6 @@ export interface Database {
           created_at?: string
         }
       }
-      fitness_task_mappings: {
-        Row: {
-          id: string
-          task_id: string
-          activity_type: string
-          metric: 'distance' | 'duration' | 'steps' | 'calories'
-          multiplier: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          task_id: string
-          activity_type: string
-          metric: 'distance' | 'duration' | 'steps' | 'calories'
-          multiplier?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          task_id?: string
-          activity_type?: string
-          metric?: 'distance' | 'duration' | 'steps' | 'calories'
-          multiplier?: number
-          created_at?: string
-        }
-      }
     }
     Views: {
       [_ in never]: never
@@ -340,5 +314,4 @@ export type MemberProgress = {
 
 export type FitnessProvider = Database['public']['Tables']['fitness_providers']['Row']
 export type FitnessActivity = Database['public']['Tables']['fitness_activities']['Row']
-export type FitnessTaskMapping = Database['public']['Tables']['fitness_task_mappings']['Row']
 

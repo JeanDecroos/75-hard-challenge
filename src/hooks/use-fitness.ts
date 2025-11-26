@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import { FitnessProvider, FitnessActivity } from '@/types/database'
+import { FitnessProvider, FitnessActivity } from '@/types'
 
 const supabase = createClient()
 
@@ -95,68 +95,3 @@ export function useFitnessActivities(date?: string) {
   })
 }
 
-export function useFitnessTaskMappings() {
-  return useQuery({
-    queryKey: ['fitness-task-mappings'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('fitness_task_mappings')
-        .select(`
-          *,
-          tasks (
-            id,
-            label,
-            type,
-            target_value,
-            unit
-          )
-        `)
-
-      if (error) throw error
-      return data
-    },
-  })
-}
-
-export function useCreateFitnessTaskMapping() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (mapping: {
-      task_id: string
-      activity_type: string
-      metric: 'distance' | 'duration' | 'steps' | 'calories'
-      multiplier?: number
-    }) => {
-      const { data, error } = await supabase
-        .from('fitness_task_mappings')
-        .insert(mapping)
-        .select()
-        .single()
-
-      if (error) throw error
-      return data
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fitness-task-mappings'] })
-    },
-  })
-}
-
-export function useDeleteFitnessTaskMapping() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('fitness_task_mappings')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fitness-task-mappings'] })
-    },
-  })
-}

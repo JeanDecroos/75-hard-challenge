@@ -275,26 +275,48 @@ Created `docs/project-logs/` folder with:
 
 ---
 
-### Prompt 3: Build Fix and Deployment
+### Prompt 3: Strava Integration Revision
 
-> I can't see the branch on Netlify
+> I want to revise the strava integration. You have to be able to authenticate first with your strava, and then it gets information from your strava sessions, let's say you posted 2 excercises, 2x 30 minutes, you should be able to auto complete the 2x 30 minutes exercise per day.
 
 **What was done:**
 
-1. **Build Issue Resolution**
-   - Fixed naming conflict between `Link` icon and Next.js `Link` component
-   - Renamed lucide-react `Link` icon to `LinkIcon` to resolve compilation error
-   - Verified successful build with `npm run build`
+1. **Simplified Auto-Population Logic**
+   - Removed complex task-activity mapping system
+   - Implemented automatic unit matching based on task units
+   - Tasks with compatible units (minutes, steps, distance, calories) auto-populate from fitness data
 
-2. **Deployment Guidance**
-   - Provided comprehensive Netlify deployment options
-   - Documented environment variable requirements
-   - Prepared feature branch for production deployment
+2. **Automatic Unit Recognition**
+   - Distance: km, miles, meters → matches Strava distance
+   - Time: minutes, hours → matches Strava duration
+   - Steps: steps → matches Strava step count
+   - Calories: calories, kcal → matches Strava calories
+   - Exercise terms: exercise, workout, training → matches duration
+
+3. **Database Simplification**
+   - Removed `fitness_task_mappings` table
+   - Kept only core fitness provider and activity tables
+   - Streamlined RLS policies and indexes
+
+4. **UI Simplification**
+   - Removed complex mapping interface from challenge settings
+   - Maintained simple Strava connect/disconnect in user settings
+   - Auto-population happens transparently based on task units
+
+**Example Auto-Population:**
+- Task: "Exercise 60 minutes" → Strava shows 2×30min workouts → Auto-completes ✓
+- Task: "Walk 5,000 steps" → Strava shows 5,200 steps → Auto-completes ✓
+- Task: "Run 5km" → Strava shows 5.2km run → Auto-completes ✓
 
 **Files changed:**
-- `src/app/(app)/challenge/[id]/settings/page.tsx` - Fixed Link naming conflict
+- `supabase/migrations/002_fitness_integrations.sql` - Removed task mappings table
+- `src/types/database.ts` - Removed fitness mapping types
+- `src/lib/fitness-utils.ts` - Simplified auto-population logic with automatic unit matching
+- `src/hooks/use-fitness.ts` - Removed mapping-related hooks
+- `src/app/(app)/challenge/[id]/settings/page.tsx` - Removed mapping UI
+- `src/app/(app)/challenge/[id]/check-in/[date]/page.tsx` - Unchanged (still auto-populates)
 
-**Result:** Build now passes successfully, ready for Netlify deployment
+**Result:** Much simpler and more intuitive system - just connect Strava and tasks with compatible units auto-complete automatically
 
 ---
 

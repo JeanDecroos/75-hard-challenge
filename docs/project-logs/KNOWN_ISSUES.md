@@ -78,14 +78,15 @@ This document tracks known bugs, issues, and planned improvements for the 75 Har
 
 ### Current Implementation
 - **Strava Integration**: ✅ Fully implemented with OAuth 2.0 and activity syncing
-- **Auto-Population**: ✅ Tasks automatically complete based on fitness metrics
-- **Task Mapping**: ✅ Flexible linking between tasks and activity types
+- **Auto-Population**: ✅ Automatic task completion based on unit recognition
+- **Unit Matching**: ✅ Intelligent matching of task units to fitness metrics
+- **Simplified UX**: ✅ No manual mapping required - works automatically
 
 ### Known Limitations
 - **Apple Health**: Cannot be implemented via web app due to iOS-only APIs
 - **Strava Rate Limits**: 100 requests/15min, 1000/day (handled gracefully)
 - **Data Sync**: Only syncs activities from last 30 days on initial connection
-- **Manual Mapping**: Users must manually link tasks to fitness activities
+- **Unit Recognition**: Limited to supported units (distance, time, steps, calories)
 
 ### Privacy & Security
 - All fitness data encrypted and scoped to authenticated users
