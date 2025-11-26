@@ -40,9 +40,9 @@ export function useChallenges() {
 
       if (memberError) throw memberError
 
-      const joinedChallenges = memberChallenges
-        ?.map(m => m.challenge)
-        .filter(Boolean) as ChallengeWithTasks[] || []
+      const joinedChallenges = (memberChallenges
+        ?.map((m: any) => m.challenge as ChallengeWithTasks)
+        .filter(Boolean) || []) as ChallengeWithTasks[]
 
       return [...(ownedChallenges || []), ...joinedChallenges] as ChallengeWithTasks[]
     },
