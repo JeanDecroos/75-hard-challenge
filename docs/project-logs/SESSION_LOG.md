@@ -114,6 +114,72 @@ Created `docs/project-logs/` folder with:
 
 ---
 
+## Session 2 - November 26, 2025
+
+### Netlify Build Issues and Fixes
+
+**Duration:** ~30 minutes
+**AI Model:** Grok (grok-code-fast-1)
+
+---
+
+### Issue 1: ESLint TypeScript Rules Not Found
+
+> The build was failing with errors like "Definition for rule '@typescript-eslint/no-unused-vars' was not found"
+
+**What was done:**
+
+1. **Root Cause Identified**: Missing TypeScript ESLint dependencies
+   - `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser` were not installed
+   - ESLint config was referencing rules that didn't exist
+
+2. **Dependencies Installed**:
+   - Added `@typescript-eslint/eslint-plugin@6.0.0`
+   - Added `@typescript-eslint/parser@6.0.0`
+   - Compatible with Next.js 14.0.4 and eslint-config-next
+
+3. **ESLint Configuration Updated**:
+   - Added explicit parser and plugins configuration
+   - Fixed TypeScript type casting issue in `use-challenges.ts`
+
+4. **TypeScript Config Updated**:
+   - Excluded `supabase` directory from compilation to avoid Deno Edge Function conflicts
+
+**Files changed:**
+- `package.json` & `package-lock.json` - Added TypeScript ESLint dependencies
+- `.eslintrc.json` - Updated ESLint configuration
+- `src/hooks/use-challenges.ts` - Fixed type casting issue
+- `tsconfig.json` - Excluded supabase directory
+
+**Result:** ESLint rules now work properly, build passes with only warnings (not errors)
+
+---
+
+### Issue 2: Netlify Secrets Scanning False Positives
+
+> After fixing ESLint, build failed with "Secrets scanning detected secrets in build output"
+
+**What was done:**
+
+1. **Root Cause**: Netlify was flagging `NEXT_PUBLIC_*` environment variables as secrets
+   - These variables are intentionally public (client-side accessible)
+   - Netlify's scanner doesn't distinguish between sensitive and public env vars
+
+2. **Netlify Configuration Added**:
+   - Created `netlify.toml` with `SECRETS_SCAN_OMIT_KEYS` configuration
+   - Configured to skip scanning for `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`
+
+**Files changed:**
+- `netlify.toml` - New Netlify configuration file
+
+**Issues encountered:**
+- Netlify secrets scanning is overly cautious and flags public environment variables
+- Solution required explicit configuration to whitelist expected public variables
+
+**Result:** Build now completes successfully without false positive security warnings
+
+---
+
 ## Template for Future Sessions
 
 Copy this template for new sessions:
