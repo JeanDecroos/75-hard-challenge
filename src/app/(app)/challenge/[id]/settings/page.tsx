@@ -24,8 +24,10 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { useChallenge, useUpdateChallenge, useRegenerateInviteToken } from '@/hooks/use-challenges'
 import { useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/use-tasks'
+import { useFitnessTaskMappings, useCreateFitnessTaskMapping, useDeleteFitnessTaskMapping } from '@/hooks/use-fitness'
+import { getActivityTypeSuggestions } from '@/lib/fitness-utils'
 import type { Task } from '@/types'
-import { 
+import {
   ArrowLeft,
   Settings,
   Plus,
@@ -34,7 +36,10 @@ import {
   RefreshCw,
   Save,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Activity,
+  Link,
+  Unlink
 } from 'lucide-react'
 
 interface PageProps {
@@ -52,6 +57,9 @@ export default function ChallengeSettingsPage({ params }: PageProps) {
   const createTask = useCreateTask()
   const updateTask = useUpdateTask()
   const deleteTask = useDeleteTask()
+  const fitnessMappings = useFitnessTaskMappings()
+  const createFitnessMapping = useCreateFitnessTaskMapping()
+  const deleteFitnessMapping = useDeleteFitnessTaskMapping()
 
   const [name, setName] = useState('')
   const [durationDays, setDurationDays] = useState(75)
@@ -328,6 +336,46 @@ export default function ChallengeSettingsPage({ params }: PageProps) {
           </Dialog>
         </CardContent>
       </Card>
+
+      {/* Fitness Mappings */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Fitness Integration
+            </CardTitle>
+            <CardDescription>
+              Automatically populate task progress from fitness activities
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              Link your tasks to fitness activities to automatically complete them based on your tracked workouts.
+            </div>
+
+            <div className="space-y-3">
+              {tasks.map(task => {
+                const mapping = fitnessMappings.data?.find(m => m.task_id === task.id)
+                return (
+                  <TaskFitnessMapping
+                    key={task.id}
+                    task={task}
+                    mapping={mapping}
+                    onCreate={createFitnessMapping.mutateAsync}
+                    onDelete={deleteFitnessMapping.mutateAsync}
+                    isLoading={createFitnessMapping.isPending || deleteFitnessMapping.isPending}
+                  />
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   )
 }
@@ -448,6 +496,148 @@ function TaskEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function TaskFitnessMapping({
+  task,
+  mapping,
+  onCreate,
+  onDelete,
+  isLoading
+}: {
+  task: Task
+  mapping: any
+  onCreate: (data: { task_id: string; activity_type: string; metric: 'distance' | 'duration' | 'steps' | 'calories'; multiplier: number }) => Promise<any>
+  onDelete: (id: string) => Promise<void>
+  isLoading: boolean
+}) {
+  const [activityType, setActivityType] = useState(mapping?.activity_type || '')
+  const [metric, setMetric] = useState<'distance' | 'duration' | 'steps' | 'calories'>(mapping?.metric || 'distance')
+  const [multiplier, setMultiplier] = useState(mapping?.multiplier || 1)
+  const { toast } = useToast()
+
+  const suggestions = getActivityTypeSuggestions()
+  const selectedSuggestion = suggestions.find(s => s.value === activityType)
+
+  const handleCreate = async () => {
+    if (!activityType || !metric) return
+
+    try {
+      await onCreate({
+        task_id: task.id,
+        activity_type: activityType,
+        metric,
+        multiplier,
+      })
+      toast({
+        title: 'Fitness mapping created!',
+        variant: 'success',
+      })
+    } catch (error) {
+      toast({
+        title: 'Failed to create mapping',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!mapping?.id) return
+
+    try {
+      await onDelete(mapping.id)
+      toast({
+        title: 'Fitness mapping removed!',
+        variant: 'success',
+      })
+    } catch (error) {
+      toast({
+        title: 'Failed to remove mapping',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between p-3 border rounded-lg">
+      <div className="flex-1">
+        <div className="font-medium">{task.label}</div>
+        <div className="text-sm text-muted-foreground">
+          Target: {task.target_value} {task.unit || ''}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        {mapping ? (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Linked to </span>
+            <span className="font-medium">{selectedSuggestion?.label || activityType}</span>
+            <span className="text-muted-foreground"> ({metric})</span>
+            {multiplier !== 1 && <span className="text-muted-foreground"> ×{multiplier}</span>}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Select value={activityType} onValueChange={setActivityType}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Activity" />
+              </SelectTrigger>
+              <SelectContent>
+                {suggestions.map(suggestion => (
+                  <SelectItem key={suggestion.value} value={suggestion.value}>
+                    {suggestion.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={metric} onValueChange={(value: any) => setMetric(value)}>
+              <SelectTrigger className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {selectedSuggestion?.metrics.map(m => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {metric === 'distance' && (
+              <Input
+                type="number"
+                value={multiplier}
+                onChange={(e) => setMultiplier(parseFloat(e.target.value) || 1)}
+                className="w-16"
+                step="0.1"
+                placeholder="1.0"
+              />
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-1">
+          {mapping ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              disabled={isLoading}
+            >
+              <Unlink className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCreate}
+              disabled={isLoading || !activityType || !metric}
+            >
+              <Link className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

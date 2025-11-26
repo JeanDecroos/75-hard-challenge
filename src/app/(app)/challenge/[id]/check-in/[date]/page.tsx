@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/use-toast'
 import { useChallenge, useDailyEntry, useSaveDailyEntry, uploadProgressImage } from '@/hooks/use-challenges'
+import { autoPopulateTaskCompletions } from '@/lib/fitness-utils'
 import type { Task, TaskCompletion } from '@/types'
 import { 
   CheckCircle2, 
@@ -58,6 +59,35 @@ export default function CheckInPage({ params }: PageProps) {
       setTaskCompletions(completions)
     }
   })
+
+  // Auto-populate task completions from fitness data when no existing entry
+  useEffect(() => {
+    const initializeFromFitness = async () => {
+      if (existingEntry || !challenge?.tasks || taskCompletions.size > 0) return
+
+      try {
+        const autoCompletions = await autoPopulateTaskCompletions(
+          challenge.user_id,
+          params.id,
+          params.date,
+          challenge.tasks
+        )
+
+        const completionsMap = new Map<string, { value: number; is_completed: boolean }>()
+        autoCompletions.forEach(completion => {
+          completionsMap.set(completion.task_id, {
+            value: completion.value,
+            is_completed: completion.is_completed,
+          })
+        })
+        setTaskCompletions(completionsMap)
+      } catch (error) {
+        console.error('Failed to auto-populate from fitness data:', error)
+      }
+    }
+
+    initializeFromFitness()
+  }, [existingEntry, challenge, params.id, params.date, taskCompletions.size])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
