@@ -12,16 +12,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/hooks/use-auth'
+import { useStravaStatus, useStravaAuthorize, useStravaDisconnect, useStravaSync } from '@/hooks/use-fitness'
 import { createClient } from '@/lib/supabase/client'
 import { timezones } from '@/lib/utils'
-import { 
+import {
   ArrowLeft,
   User,
   Bell,
   Clock,
   Globe,
   Save,
-  Loader2
+  Loader2,
+  Activity,
+  RefreshCw,
+  Unlink,
+  ExternalLink
 } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -228,6 +233,15 @@ export default function SettingsPage() {
         </Card>
       </motion.div>
 
+      {/* Fitness Integrations */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+      >
+        <FitnessIntegrationsCard />
+      </motion.div>
+
       {/* Save Button */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -249,6 +263,157 @@ export default function SettingsPage() {
         </Button>
       </motion.div>
     </div>
+  )
+}
+
+function FitnessIntegrationsCard() {
+  const { data: stravaStatus, isLoading } = useStravaStatus()
+  const authorizeMutation = useStravaAuthorize()
+  const disconnectMutation = useStravaDisconnect()
+  const syncMutation = useStravaSync()
+  const { toast } = useToast()
+
+  const handleStravaConnect = async () => {
+    try {
+      const authUrl = await authorizeMutation.mutateAsync()
+      window.location.href = authUrl
+    } catch (error) {
+      toast({
+        title: 'Failed to connect to Strava',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleStravaDisconnect = async () => {
+    try {
+      await disconnectMutation.mutateAsync()
+      toast({
+        title: 'Strava disconnected',
+        variant: 'success',
+      })
+    } catch (error) {
+      toast({
+        title: 'Failed to disconnect Strava',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleStravaSync = async () => {
+    try {
+      const result = await syncMutation.mutateAsync()
+      toast({
+        title: `Synced ${result.activities_synced} activities`,
+        variant: 'success',
+      })
+    } catch (error) {
+      toast({
+        title: 'Failed to sync activities',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  return (
+    <Card className="glass-card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="w-5 h-5" />
+          Fitness Integrations
+        </CardTitle>
+        <CardDescription>
+          Connect fitness apps to automatically track your activities
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Strava Integration */}
+        <div className="flex items-center justify-between p-4 border rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">S</span>
+            </div>
+            <div>
+              <h3 className="font-medium">Strava</h3>
+              <p className="text-sm text-muted-foreground">
+                {isLoading ? (
+                  'Loading...'
+                ) : stravaStatus?.connected ? (
+                  `Connected • Last sync: ${stravaStatus.last_sync ? new Date(stravaStatus.last_sync).toLocaleDateString() : 'Never'}`
+                ) : (
+                  'Sync running, cycling, and fitness activities'
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {stravaStatus?.connected ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStravaSync}
+                  disabled={syncMutation.isPending}
+                  className="gap-2"
+                >
+                  {syncMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  Sync
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleStravaDisconnect}
+                  disabled={disconnectMutation.isPending}
+                  className="gap-2"
+                >
+                  {disconnectMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Unlink className="w-4 h-4" />
+                  )}
+                  Disconnect
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={handleStravaConnect}
+                disabled={authorizeMutation.isPending}
+                className="gap-2"
+              >
+                {authorizeMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-4 h-4" />
+                )}
+                Connect
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Apple Health Placeholder */}
+        <div className="flex items-center justify-between p-4 border rounded-lg opacity-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">H</span>
+            </div>
+            <div>
+              <h3 className="font-medium">Apple Health</h3>
+              <p className="text-sm text-muted-foreground">
+                iOS only • Coming soon
+              </p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" disabled>
+            Coming Soon
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

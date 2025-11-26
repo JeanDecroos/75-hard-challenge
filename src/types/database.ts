@@ -177,6 +177,123 @@ export interface Database {
           joined_at?: string
         }
       }
+      fitness_providers: {
+        Row: {
+          id: string
+          user_id: string
+          provider: 'strava' | 'apple_health'
+          access_token: string | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          athlete_id: string | null
+          connected_at: string
+          last_sync_at: string | null
+          is_active: boolean
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          provider: 'strava' | 'apple_health'
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          athlete_id?: string | null
+          connected_at?: string
+          last_sync_at?: string | null
+          is_active?: boolean
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          provider?: 'strava' | 'apple_health'
+          access_token?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          athlete_id?: string | null
+          connected_at?: string
+          last_sync_at?: string | null
+          is_active?: boolean
+        }
+      }
+      fitness_activities: {
+        Row: {
+          id: string
+          user_id: string
+          provider: 'strava' | 'apple_health'
+          provider_activity_id: string
+          activity_type: string
+          name: string | null
+          start_date: string
+          duration_seconds: number | null
+          distance_meters: number | null
+          calories_burned: number | null
+          steps_count: number | null
+          heart_rate_avg: number | null
+          heart_rate_max: number | null
+          raw_data: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          provider: 'strava' | 'apple_health'
+          provider_activity_id: string
+          activity_type: string
+          name?: string | null
+          start_date: string
+          duration_seconds?: number | null
+          distance_meters?: number | null
+          calories_burned?: number | null
+          steps_count?: number | null
+          heart_rate_avg?: number | null
+          heart_rate_max?: number | null
+          raw_data?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          provider?: 'strava' | 'apple_health'
+          provider_activity_id?: string
+          activity_type?: string
+          name?: string | null
+          start_date?: string
+          duration_seconds?: number | null
+          distance_meters?: number | null
+          calories_burned?: number | null
+          steps_count?: number | null
+          heart_rate_avg?: number | null
+          heart_rate_max?: number | null
+          raw_data?: Json | null
+          created_at?: string
+        }
+      }
+      fitness_task_mappings: {
+        Row: {
+          id: string
+          task_id: string
+          activity_type: string
+          metric: 'distance' | 'duration' | 'steps' | 'calories'
+          multiplier: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          task_id: string
+          activity_type: string
+          metric: 'distance' | 'duration' | 'steps' | 'calories'
+          multiplier?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          activity_type?: string
+          metric?: 'distance' | 'duration' | 'steps' | 'calories'
+          multiplier?: number
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -220,4 +337,8 @@ export type MemberProgress = {
   total_days: number
   current_streak: number
 }
+
+export type FitnessProvider = Database['public']['Tables']['fitness_providers']['Row']
+export type FitnessActivity = Database['public']['Tables']['fitness_activities']['Row']
+export type FitnessTaskMapping = Database['public']['Tables']['fitness_task_mappings']['Row']
 
