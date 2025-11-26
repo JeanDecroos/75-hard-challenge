@@ -180,6 +180,185 @@ Created `docs/project-logs/` folder with:
 
 ---
 
+## Session 3 - November 26, 2025
+
+### Fitness Integration Implementation (Strava + Apple Health)
+
+**Duration:** ~2 hours
+**AI Model:** Grok (grok-code-fast-1)
+
+---
+
+### Prompt 1: Fitness Integration Request
+
+> Let's do something new now, let's try and make the integration with our apple health or strava?
+> Is this something hard to do?
+
+**What was done:**
+
+1. **Analysis of Fitness Integration Options**
+   - **Apple Health**: Determined to be challenging due to iOS-only access and lack of web APIs
+   - **Strava**: Identified as feasible with well-documented REST API, OAuth 2.0, and web compatibility
+   - **Recommendation**: Focus on Strava integration as primary fitness data source
+
+2. **Database Schema Design**
+   - Created `fitness_providers` table for storing OAuth connections
+   - Created `fitness_activities` table for storing synced activity data
+   - Created `fitness_task_mappings` table for linking tasks to activity types
+   - Added Row Level Security policies for all tables
+   - Implemented proper indexes for performance
+
+3. **Strava OAuth Implementation**
+   - Built `StravaClient` utility class for API interactions
+   - Created OAuth 2.0 authorization flow with PKCE
+   - Implemented token refresh logic for long-term access
+   - Added activity data mapping and conversion utilities
+
+4. **Backend API Endpoints**
+   - Created Next.js API routes for Strava auth (`/api/auth/strava`)
+   - Built Edge Function (`supabase/functions/strava-oauth`) for secure token handling
+   - Implemented activity syncing with automatic data aggregation
+   - Added proper error handling and rate limiting considerations
+
+5. **Frontend Integration**
+   - Created fitness hooks (`use-fitness.ts`) for React Query integration
+   - Updated settings page with Strava connection UI
+   - Added challenge settings for task-activity mapping
+   - Implemented activity type suggestions (run, walk, cycle, swim, etc.)
+
+6. **Auto-Population System**
+   - Built fitness utilities for activity aggregation and metrics calculation
+   - Updated check-in page to auto-populate tasks from recent fitness data
+   - Added configurable multipliers for unit conversion (meters to km, seconds to minutes)
+   - Implemented fallback to manual entry when no fitness data available
+
+**Files changed:**
+- `supabase/migrations/002_fitness_integrations.sql` - Database schema
+- `src/types/database.ts` - TypeScript type definitions
+- `src/lib/strava.ts` - Strava API client and utilities
+- `src/lib/fitness-utils.ts` - Fitness data processing utilities
+- `src/hooks/use-fitness.ts` - React hooks for fitness features
+- `src/app/api/auth/strava/route.ts` - Next.js API route for auth
+- `src/app/api/auth/strava/callback/route.ts` - OAuth callback handler
+- `supabase/functions/strava-oauth/index.ts` - Edge Function for secure auth
+- `src/app/(app)/settings/page.tsx` - Settings UI for fitness connections
+- `src/app/(app)/challenge/[id]/settings/page.tsx` - Task mapping interface
+- `src/app/(app)/challenge/[id]/check-in/[date]/page.tsx` - Auto-population logic
+
+**Technical Implementation Details:**
+- **OAuth Flow**: Secure token exchange with Supabase Edge Functions
+- **Data Sync**: Automatic activity fetching from last 30 days
+- **Activity Types**: Support for distance, duration, steps, and calories metrics
+- **Task Mapping**: Flexible system linking any task to fitness activities
+- **Auto-Complete**: Intelligent task completion based on fitness goals
+
+**Known Limitations:**
+- Apple Health integration requires native iOS app (not implemented)
+- Strava API rate limits (100 requests/15min, 1000/day)
+- Manual activity type mapping required for each task
+- Fitness data only accessible for connected users
+
+---
+
+### Prompt 2: Git Branch Management
+
+> First I want you to create a new branch for this
+
+**What was done:**
+
+1. **Git Branch Creation**
+   - Created `feature/fitness-integration` branch for isolated development
+   - Pushed branch to remote repository for collaboration
+   - Maintained clean separation from main branch
+
+**Result:** Feature branch created and pushed successfully
+
+---
+
+### Prompt 3: Build Fix and Deployment
+
+> I can't see the branch on Netlify
+
+**What was done:**
+
+1. **Build Issue Resolution**
+   - Fixed naming conflict between `Link` icon and Next.js `Link` component
+   - Renamed lucide-react `Link` icon to `LinkIcon` to resolve compilation error
+   - Verified successful build with `npm run build`
+
+2. **Deployment Guidance**
+   - Provided comprehensive Netlify deployment options
+   - Documented environment variable requirements
+   - Prepared feature branch for production deployment
+
+**Files changed:**
+- `src/app/(app)/challenge/[id]/settings/page.tsx` - Fixed Link naming conflict
+
+**Result:** Build now passes successfully, ready for Netlify deployment
+
+---
+
+### Key Findings and Decisions
+
+**Fitness Integration Feasibility:**
+- **Strava**: ✅ **Highly Feasible** - Well-documented API, OAuth 2.0, web-compatible
+- **Apple Health**: ❌ **Not Feasible** - iOS-only, no web APIs, requires native app development
+- **Recommendation**: Strava as primary fitness integration with Apple Health as future native app feature
+
+**Technical Architecture:**
+- **Edge Functions**: Used for secure OAuth token handling and API calls
+- **Auto-Population**: Intelligent task completion based on fitness metrics
+- **Flexible Mapping**: Tasks can be linked to any activity type with configurable multipliers
+- **Fallback Design**: Graceful degradation to manual entry when fitness data unavailable
+
+**Data Privacy & Security:**
+- All fitness data stored with RLS policies
+- Users control which tasks sync with fitness data
+- Secure OAuth flow with proper token refresh
+- No automatic data sharing without explicit user consent
+
+**User Experience:**
+- Seamless integration - fitness data appears automatically in check-ins
+- Configurable mappings per challenge
+- Visual feedback for connected accounts and sync status
+- Clear indication when tasks are auto-populated vs manual entry
+
+**Performance Considerations:**
+- Efficient data aggregation from stored activities
+- Minimal API calls with proper caching via React Query
+- Background sync doesn't impact check-in flow
+- Smart filtering to only sync recent activities (30 days)
+
+---
+
+### Next Steps & Future Enhancements
+
+**Immediate (Ready for Implementation):**
+1. Deploy feature branch to Netlify for testing
+2. Set up Strava OAuth application credentials
+3. Test end-to-end fitness data flow
+
+**Future Enhancements:**
+1. **Apple Health App**: Native iOS companion app for HealthKit integration
+2. **Additional Fitness APIs**: Fitbit, Garmin, Google Fit support
+3. **Advanced Analytics**: Fitness trends and goal tracking
+4. **Social Features**: Share fitness achievements with challenge members
+5. **Smart Suggestions**: AI-powered task mapping recommendations
+
+**Testing Requirements:**
+- Strava account with recent activities
+- Challenge with fitness-mapped tasks (e.g., "Walk 5,000 steps")
+- Check-in flow verification for auto-population
+- Manual override capability testing
+
+**Deployment Checklist:**
+- Set `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in Supabase secrets
+- Configure Netlify environment variables
+- Test OAuth flow in production environment
+- Verify Edge Function deployment and secrets
+
+---
+
 ## Template for Future Sessions
 
 Copy this template for new sessions:

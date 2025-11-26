@@ -19,11 +19,20 @@ This document tracks known bugs, issues, and planned improvements for the 75 Har
 | Reminder email sender | Need to configure actual Resend domain (currently placeholder) | TODO |
 | Task reordering | Drag-and-drop UI exists but needs DnD library integration | TODO |
 
+### Medium Priority
+
+| Issue | Description | Status |
+|-------|-------------|--------|
+| Reminder email sender | Need to configure actual Resend domain (currently placeholder) | TODO |
+| Task reordering | Drag-and-drop UI exists but needs DnD library integration | TODO |
+| Strava OAuth setup | Requires Strava app creation and credentials configuration | TODO |
+
 ### Low Priority
 
 | Issue | Description | Status |
 |-------|-------------|--------|
 | Security lint warning | `handle_new_user` function has mutable search_path | TODO |
+| Apple Health limitation | Cannot integrate via web - requires native iOS app | KNOWN LIMITATION |
 
 ---
 
@@ -40,6 +49,10 @@ This document tracks known bugs, issues, and planned improvements for the 75 Har
 - [ ] **Badges/achievements** - Gamification elements
 - [ ] **Notes history** - View all past notes
 - [ ] **Photo gallery** - View all progress photos
+- [ ] **Apple Health integration** - Native iOS app for HealthKit access
+- [ ] **Additional fitness APIs** - Fitbit, Garmin, Google Fit support
+- [ ] **Fitness trend analytics** - Charts and insights from activity data
+- [ ] **Smart task suggestions** - AI-powered fitness goal recommendations
 
 ### Technical Improvements
 
@@ -58,6 +71,33 @@ This document tracks known bugs, issues, and planned improvements for the 75 Har
 |-------|-------------|------------|------|
 | API key error | App showed "Invalid API key" JSON | Fixed by killing stale processes on port 3000 | Nov 26, 2025 |
 | Missing geist font | Build error due to missing package | Installed `geist` package | Nov 26, 2025 |
+
+---
+
+## Fitness Integration Notes
+
+### Current Implementation
+- **Strava Integration**: ✅ Fully implemented with OAuth 2.0 and activity syncing
+- **Auto-Population**: ✅ Tasks automatically complete based on fitness metrics
+- **Task Mapping**: ✅ Flexible linking between tasks and activity types
+
+### Known Limitations
+- **Apple Health**: Cannot be implemented via web app due to iOS-only APIs
+- **Strava Rate Limits**: 100 requests/15min, 1000/day (handled gracefully)
+- **Data Sync**: Only syncs activities from last 30 days on initial connection
+- **Manual Mapping**: Users must manually link tasks to fitness activities
+
+### Privacy & Security
+- All fitness data encrypted and scoped to authenticated users
+- OAuth tokens stored securely with automatic refresh
+- Users have full control over data sharing and can disconnect anytime
+- No automatic data collection without explicit user consent
+
+### Performance Considerations
+- Fitness sync happens in background and doesn't block check-ins
+- Activity aggregation optimized for common use cases
+- React Query caching prevents unnecessary API calls
+- Graceful fallback to manual entry when fitness data unavailable
 
 ---
 
@@ -92,4 +132,10 @@ Before deploying, verify:
 - [ ] Friend can see shared challenge
 - [ ] Settings save correctly
 - [ ] Reminder time respects timezone
+- [ ] Strava OAuth connection works
+- [ ] Fitness activities sync correctly
+- [ ] Task auto-population from fitness data
+- [ ] Fitness task mappings save and apply
+- [ ] Manual override of auto-populated tasks
+- [ ] Disconnect fitness account removes data
 

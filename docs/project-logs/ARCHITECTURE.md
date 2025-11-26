@@ -110,6 +110,9 @@ profiles (1) ─────────────────── (n) chall
 | `daily_entries` | Daily check-ins | date, note, image_url, is_complete |
 | `task_completions` | Task completion records | value, is_completed |
 | `challenge_members` | Social connections | challenge_id, user_id |
+| `fitness_providers` | Fitness app connections | provider, access_token, athlete_id, is_active |
+| `fitness_activities` | Synced fitness data | activity_type, distance, duration, calories, raw_data |
+| `fitness_task_mappings` | Task-activity links | task_id, activity_type, metric, multiplier |
 
 ### Row Level Security (RLS)
 
@@ -158,16 +161,87 @@ All tables have RLS enabled:
 - Checks if user's local time matches reminder time
 - Sends email via Resend if no check-in for today
 
+### 6. Fitness Integration System
+- **OAuth Flow**: Secure token exchange via Supabase Edge Functions
+- **Data Sync**: Automatic activity fetching from connected fitness providers
+- **Auto-Population**: Intelligent task completion based on fitness metrics
+- **Task Mapping**: Flexible linking between challenge tasks and activity types
+- **Privacy-First**: User-controlled data sharing with explicit consent
+- **Fallback Design**: Graceful degradation to manual entry
+
+---
+
+## Fitness Integration Architecture
+
+### Supported Providers
+
+**Strava (Primary)**
+- REST API with OAuth 2.0 authentication
+- Activity types: run, walk, ride, swim, hike, workout
+- Metrics: distance, duration, calories, heart rate
+- Rate limits: 100 requests/15min, 1000/day
+
+**Apple Health (Future)**
+- Requires native iOS app development
+- HealthKit framework integration
+- Direct device sensor access
+- Not implemented due to web platform limitations
+
+### Data Flow
+
+```
+User Action → OAuth Auth → Token Storage → Activity Sync → Metric Aggregation → Task Auto-Population
+```
+
+1. **User connects fitness account** via settings page
+2. **OAuth flow** exchanges code for access/refresh tokens
+3. **Tokens stored securely** in Supabase with encryption
+4. **Background sync** fetches recent activities (last 30 days)
+5. **Metrics aggregated** by activity type and date
+6. **Check-in auto-populates** tasks based on fitness data
+7. **Manual override** always available for adjustments
+
+### Security Model
+
+- **Row Level Security**: All fitness data scoped to authenticated user
+- **Token Encryption**: OAuth tokens stored securely in database
+- **Scoped Permissions**: Read-only access to activity data
+- **User Consent**: Explicit authorization required for each provider
+- **Data Minimization**: Only necessary fitness metrics stored
+
+### Auto-Population Logic
+
+**Task Completion Criteria:**
+- Distance tasks: meters → kilometers conversion with multiplier
+- Duration tasks: seconds → minutes conversion
+- Steps/Calories: direct metric mapping
+- Completion threshold: value ≥ target_value
+
+**Example Mapping:**
+```
+Task: "Walk 5,000 steps"
+Mapping: activity_type="walk", metric="steps", multiplier=1.0
+Activities: walk (3,200 steps) + run (2,100 steps) = 5,300 steps
+Result: Task auto-completed ✓
+```
+
 ---
 
 ## Environment Variables
 
 ```env
+# Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=       # Supabase project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY=  # Supabase anon key
 SUPABASE_SERVICE_ROLE_KEY=      # For server-side operations
+
+# Email & Notifications
 RESEND_API_KEY=                 # For email reminders
 NEXT_PUBLIC_APP_URL=            # App URL for emails
+
+# Fitness Integration (Supabase Secrets for Edge Functions)
+STRAVA_CLIENT_ID=               # Strava OAuth client ID
+STRAVA_CLIENT_SECRET=           # Strava OAuth client secret
 ```
 
 ---
