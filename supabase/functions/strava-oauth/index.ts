@@ -1,6 +1,127 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { StravaClient } from '../../../src/lib/strava.ts'
+
+// StravaClient class (inlined for edge function)
+interface StravaTokens {
+  access_token: string
+  refresh_token: string
+  expires_at: number
+  athlete: {
+    id: number
+  }
+}
+
+interface StravaActivity {
+  id: number
+  name: string
+  type: string
+  start_date: string
+  elapsed_time: number
+  distance: number
+  total_elevation_gain?: number
+  average_speed?: number
+  max_speed?: number
+  has_heartrate: boolean
+  average_heartrate?: number
+  max_heartrate?: number
+  calories?: number
+}
+
+class StravaClient {
+  private clientId: string
+  private clientSecret: string
+
+  constructor(clientId: string, clientSecret: string) {
+    this.clientId = clientId
+    this.clientSecret = clientSecret
+  }
+
+  getAuthorizationUrl(redirectUri: string, state?: string): string {
+    const params = new URLSearchParams({
+      client_id: this.clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      approval_prompt: 'auto',
+      scope: 'read,activity:read',
+    })
+
+    if (state) {
+      params.set('state', state)
+    }
+
+    return `https://www.strava.com/oauth/authorize?${params.toString()}`
+  }
+
+  async exchangeCodeForTokens(code: string, redirectUri: string): Promise<StravaTokens> {
+    const response = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Strava token exchange failed: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
+  async refreshToken(refreshToken: string): Promise<StravaTokens> {
+    const response = await fetch('https://www.strava.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Strava token refresh failed: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
+  async getActivities(accessToken: string, options: {
+    before?: number
+    after?: number
+    page?: number
+    per_page?: number
+  } = {}): Promise<StravaActivity[]> {
+    const params = new URLSearchParams()
+    if (options.before) params.set('before', options.before.toString())
+    if (options.after) params.set('after', options.after.toString())
+    if (options.page) params.set('page', options.page.toString())
+    if (options.per_page) params.set('per_page', options.per_page.toString())
+
+    const url = `https://www.strava.com/api/v3/athlete/activities?${params.toString()}`
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Strava activities: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,17 +154,34 @@ serve(async (req) => {
       )
     }
 
-    const stravaClient = new StravaClient(
-      Deno.env.get('STRAVA_CLIENT_ID') ?? '',
-      Deno.env.get('STRAVA_CLIENT_SECRET') ?? ''
-    )
+    const stravaClientId = Deno.env.get('STRAVA_CLIENT_ID')
+    const stravaClientSecret = Deno.env.get('STRAVA_CLIENT_SECRET')
+    const appUrl = Deno.env.get('APP_URL')
+
+    if (!stravaClientId || !stravaClientSecret) {
+      console.error('Missing Strava credentials: STRAVA_CLIENT_ID or STRAVA_CLIENT_SECRET not set')
+      return new Response(
+        JSON.stringify({ error: 'Strava integration not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!appUrl) {
+      console.error('Missing APP_URL environment variable')
+      return new Response(
+        JSON.stringify({ error: 'APP_URL not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const stravaClient = new StravaClient(stravaClientId, stravaClientSecret)
 
     const url = new URL(req.url)
     const action = url.searchParams.get('action')
 
     if (action === 'authorize') {
       // Return the authorization URL for the frontend to redirect to
-      const redirectUri = `${Deno.env.get('APP_URL')}/api/auth/strava/callback`
+      const redirectUri = `${appUrl}/api/auth/strava/callback`
       const authUrl = stravaClient.getAuthorizationUrl(redirectUri, user.id)
 
       return new Response(
@@ -64,7 +202,7 @@ serve(async (req) => {
         )
       }
 
-      const redirectUri = `${Deno.env.get('APP_URL')}/api/auth/strava/callback`
+      const redirectUri = `${appUrl}/api/auth/strava/callback`
 
       // Exchange code for tokens
       const tokens = await stravaClient.exchangeCodeForTokens(code, redirectUri)
@@ -95,7 +233,7 @@ serve(async (req) => {
         status: 302,
         headers: {
           ...corsHeaders,
-          'Location': `${Deno.env.get('APP_URL')}/settings?strava=connected`,
+          'Location': `${appUrl}/settings?strava=connected`,
         },
       })
     }
@@ -194,8 +332,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in strava-oauth function:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
