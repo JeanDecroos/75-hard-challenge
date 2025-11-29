@@ -12,9 +12,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { useChallenge, useDailyEntry, useSaveDailyEntry, uploadProgressImage } from '@/hooks/use-challenges'
 import { autoPopulateTaskCompletions } from '@/lib/fitness-utils'
+import { useFitnessActivities } from '@/hooks/use-fitness'
 import type { Task, TaskCompletion } from '@/types'
 import { 
   CheckCircle2, 
@@ -24,7 +26,9 @@ import {
   ImageIcon,
   Calendar,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  Activity,
+  ExternalLink
 } from 'lucide-react'
 import { formatDate, getDayNumber } from '@/lib/utils'
 import Link from 'next/link'
@@ -42,6 +46,7 @@ export default function CheckInPage({ params }: PageProps) {
   const { toast } = useToast()
   const { data: challenge, isLoading: challengeLoading } = useChallenge(params.id)
   const { data: existingEntry, isLoading: entryLoading } = useDailyEntry(params.id, params.date)
+  const { data: fitnessActivities, isLoading: activitiesLoading } = useFitnessActivities(params.date)
   const saveDailyEntry = useSaveDailyEntry()
 
   const [note, setNote] = useState(existingEntry?.note || '')
@@ -60,10 +65,18 @@ export default function CheckInPage({ params }: PageProps) {
     }
   })
 
-  // Auto-populate task completions from fitness data when no existing entry
+  // Track if we've already auto-populated to avoid infinite loops
+  const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
+
+  // Auto-populate task completions from fitness data
+  // Uses Strava activities to automatically complete matching tasks
   useEffect(() => {
     const initializeFromFitness = async () => {
-      if (existingEntry || !challenge?.tasks || taskCompletions.size > 0) return
+      if (!challenge?.tasks) return
+      if (hasAutoPopulated) return // Don't run multiple times
+      
+      // Wait for fitness activities to load
+      if (activitiesLoading) return
 
       try {
         const autoCompletions = await autoPopulateTaskCompletions(
@@ -73,21 +86,49 @@ export default function CheckInPage({ params }: PageProps) {
           challenge.tasks
         )
 
-        const completionsMap = new Map<string, { value: number; is_completed: boolean }>()
+        // Only update if we have Strava data that can complete tasks
+        const hasCompletableTasks = autoCompletions.some(c => c.is_completed && c.value > 0)
+        if (!hasCompletableTasks && (!fitnessActivities || fitnessActivities.length === 0)) {
+          return
+        }
+
+        const completionsMap = new Map(taskCompletions)
+        
         autoCompletions.forEach(completion => {
-          completionsMap.set(completion.task_id, {
-            value: completion.value,
-            is_completed: completion.is_completed,
-          })
+          // If Strava shows the task should be completed, update it
+          // This will auto-complete tasks based on Strava activities
+          const existing = completionsMap.get(completion.task_id)
+          
+          if (completion.is_completed && completion.value > 0) {
+            // Strava data shows this task should be completed
+            completionsMap.set(completion.task_id, {
+              value: completion.value,
+              is_completed: true,
+            })
+          } else if (!existing && completion.value > 0) {
+            // Set the value even if not completed (user can see progress)
+            completionsMap.set(completion.task_id, {
+              value: completion.value,
+              is_completed: false,
+            })
+          } else if (existing && completion.value > existing.value) {
+            // Update to higher value from Strava
+            completionsMap.set(completion.task_id, {
+              value: completion.value,
+              is_completed: completion.is_completed || existing.is_completed,
+            })
+          }
         })
+        
         setTaskCompletions(completionsMap)
+        setHasAutoPopulated(true)
       } catch (error) {
         console.error('Failed to auto-populate from fitness data:', error)
       }
     }
 
     initializeFromFitness()
-  }, [existingEntry, challenge, params.id, params.date, taskCompletions.size])
+  }, [existingEntry, challenge, params.id, params.date, fitnessActivities, activitiesLoading, hasAutoPopulated])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -230,12 +271,68 @@ export default function CheckInPage({ params }: PageProps) {
         </CardContent>
       </Card>
 
+      {/* Synced Activities */}
+      {fitnessActivities && fitnessActivities.length > 0 && (
+        <Card className="glass-card border-primary/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              Synced Activities
+            </CardTitle>
+            <CardDescription>
+              Activities from Strava that may have auto-filled your tasks
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {fitnessActivities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">{activity.name || 'Untitled Activity'}</div>
+                    <div className="text-sm text-muted-foreground flex items-center gap-4 mt-1">
+                      <span className="capitalize">{activity.activity_type}</span>
+                      {activity.distance_meters && (
+                        <span>{(activity.distance_meters / 1000).toFixed(2)} km</span>
+                      )}
+                      {activity.duration_seconds && (
+                        <span>{Math.round(activity.duration_seconds / 60)} min</span>
+                      )}
+                      {activity.calories_burned && (
+                        <span>{activity.calories_burned} cal</span>
+                      )}
+                    </div>
+                  </div>
+                  {activity.raw_data && (activity.raw_data as any).id && (
+                    <a
+                      href={`https://www.strava.com/activities/${(activity.raw_data as any).id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:text-primary/80"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tasks */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle>Daily Tasks</CardTitle>
           <CardDescription>
             Complete your tasks for the day
+            {fitnessActivities && fitnessActivities.length > 0 && (
+              <span className="block mt-1 text-xs text-primary">
+                Some tasks may have been auto-filled from your Strava activities
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -251,6 +348,7 @@ export default function CheckInPage({ params }: PageProps) {
                   task={task}
                   completion={getTaskCompletion(task.id)}
                   onChange={(value) => handleTaskChange(task.id, task, value)}
+                  hasFitnessData={fitnessActivities && fitnessActivities.length > 0 && task.type === 'number'}
                 />
               </motion.div>
             ))}
@@ -358,10 +456,12 @@ function TaskItem({
   task,
   completion,
   onChange,
+  hasFitnessData = false,
 }: {
   task: Task
   completion: { value: number; is_completed: boolean }
   onChange: (value: number | boolean) => void
+  hasFitnessData?: boolean
 }) {
   return (
     <div 
@@ -391,10 +491,16 @@ function TaskItem({
         )}
 
         <div className="flex-1">
-          <Label className="text-base font-medium">
+          <Label className="text-base font-medium flex items-center gap-2">
             {task.label}
             {!task.is_required && (
-              <span className="text-xs text-muted-foreground ml-2">(optional)</span>
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            )}
+            {hasFitnessData && completion.value > 0 && (
+              <Badge variant="outline" className="text-xs">
+                <Activity className="w-3 h-3 mr-1" />
+                Auto-filled
+              </Badge>
             )}
           </Label>
         </div>
