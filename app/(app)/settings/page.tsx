@@ -307,7 +307,7 @@ function FitnessIntegrationsCard() {
         if (event.data.type === 'strava-oauth-success') {
           popup.close()
           window.removeEventListener('message', messageListener)
-          clearInterval(checkClosed)
+          if (checkClosed) clearInterval(checkClosed)
           authorizeMutation.reset()
           // Invalidate queries to refresh the status
           queryClient.invalidateQueries({ queryKey: ['strava-status'] })
@@ -318,6 +318,7 @@ function FitnessIntegrationsCard() {
         } else if (event.data.type === 'strava-oauth-error') {
           popup.close()
           window.removeEventListener('message', messageListener)
+          if (checkClosed) clearInterval(checkClosed)
           toast({
             title: 'Failed to connect Strava',
             description: event.data.error || 'An error occurred',
@@ -329,9 +330,9 @@ function FitnessIntegrationsCard() {
       window.addEventListener('message', messageListener)
 
       // Check if popup was closed manually
-      let checkClosed: NodeJS.Timeout | null = setInterval(() => {
+      const checkClosed = setInterval(() => {
         if (popup.closed) {
-          if (checkClosed) clearInterval(checkClosed)
+          clearInterval(checkClosed)
           window.removeEventListener('message', messageListener)
         }
       }, 1000)
