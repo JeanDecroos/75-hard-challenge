@@ -299,26 +299,47 @@ function FitnessIntegrationsCard() {
         return
       }
 
+      // Track interval for cleanup
+      let checkClosed: NodeJS.Timeout | null = null
+
       // Listen for messages from the OAuth callback
       const messageListener = (event: MessageEvent) => {
         // Verify origin for security
         if (event.origin !== window.location.origin) return
 
         if (event.data.type === 'strava-oauth-success') {
-          popup.close()
-          window.removeEventListener('message', messageListener)
+          // Close popup and clean up
           if (checkClosed) clearInterval(checkClosed)
+          window.removeEventListener('message', messageListener)
+          
+          // Close the popup
+          if (popup && !popup.closed) {
+            popup.close()
+          }
+          
+          // Reset mutation state
           authorizeMutation.reset()
-          // Invalidate queries to refresh the status
-          queryClient.invalidateQueries({ queryKey: ['strava-status'] })
+          
+          // Wait a moment for backend to process, then refetch status
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['strava-status'] })
+            queryClient.refetchQueries({ queryKey: ['strava-status'] })
+          }, 500)
+          
           toast({
             title: 'Strava connected!',
             variant: 'success',
           })
         } else if (event.data.type === 'strava-oauth-error') {
-          popup.close()
-          window.removeEventListener('message', messageListener)
+          // Close popup and clean up
           if (checkClosed) clearInterval(checkClosed)
+          window.removeEventListener('message', messageListener)
+          
+          // Close the popup
+          if (popup && !popup.closed) {
+            popup.close()
+          }
+          
           toast({
             title: 'Failed to connect Strava',
             description: event.data.error || 'An error occurred',
@@ -330,9 +351,9 @@ function FitnessIntegrationsCard() {
       window.addEventListener('message', messageListener)
 
       // Check if popup was closed manually
-      const checkClosed = setInterval(() => {
+      checkClosed = setInterval(() => {
         if (popup.closed) {
-          clearInterval(checkClosed)
+          if (checkClosed) clearInterval(checkClosed)
           window.removeEventListener('message', messageListener)
         }
       }, 1000)
