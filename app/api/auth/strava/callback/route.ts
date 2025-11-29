@@ -8,16 +8,58 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
 
   if (error) {
-    // Redirect to settings with error
-    return NextResponse.redirect(
-      new URL(`/settings?strava=error&error=${error}`, request.url)
-    )
+    // If opened in a popup, send error message to parent window
+    const errorHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Strava Connection Error</title>
+        </head>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'strava-oauth-error',
+                error: '${error}'
+              }, window.location.origin);
+              window.close();
+            } else {
+              window.location.href = '/settings?strava=error&error=${error}';
+            }
+          </script>
+        </body>
+      </html>
+    `
+    return new NextResponse(errorHtml, {
+      headers: { 'Content-Type': 'text/html' },
+    })
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(
-      new URL('/settings?strava=error&error=missing_params', request.url)
-    )
+    const errorHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Strava Connection Error</title>
+        </head>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'strava-oauth-error',
+                error: 'missing_params'
+              }, window.location.origin);
+              window.close();
+            } else {
+              window.location.href = '/settings?strava=error&error=missing_params';
+            }
+          </script>
+        </body>
+      </html>
+    `
+    return new NextResponse(errorHtml, {
+      headers: { 'Content-Type': 'text/html' },
+    })
   }
 
   try {
@@ -27,9 +69,30 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user || user.id !== state) {
-      return NextResponse.redirect(
-        new URL('/settings?strava=error&error=auth_mismatch', request.url)
-      )
+      const errorHtml = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Strava Connection Error</title>
+          </head>
+          <body>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'strava-oauth-error',
+                  error: 'auth_mismatch'
+                }, window.location.origin);
+                window.close();
+              } else {
+                window.location.href = '/settings?strava=error&error=auth_mismatch';
+              }
+            </script>
+          </body>
+        </html>
+      `
+      return new NextResponse(errorHtml, {
+        headers: { 'Content-Type': 'text/html' },
+      })
     }
 
     // The edge function will handle the actual token exchange
@@ -46,15 +109,59 @@ export async function GET(request: NextRequest) {
       throw new Error('Failed to complete Strava OAuth')
     }
 
-    // Redirect back to settings with success
-    return NextResponse.redirect(
-      new URL('/settings?strava=connected', request.url)
-    )
+    // If opened in a popup, send message to parent window and close
+    // Otherwise, redirect normally
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Strava Connected</title>
+        </head>
+        <body>
+          <script>
+            if (window.opener) {
+              // Send success message to parent window
+              window.opener.postMessage({
+                type: 'strava-oauth-success'
+              }, window.location.origin);
+              window.close();
+            } else {
+              // Not in a popup, redirect normally
+              window.location.href = '/settings?strava=connected';
+            }
+          </script>
+        </body>
+      </html>
+    `
+    return new NextResponse(html, {
+      headers: { 'Content-Type': 'text/html' },
+    })
 
   } catch (error) {
     console.error('Strava OAuth callback error:', error)
-    return NextResponse.redirect(
-      new URL('/settings?strava=error&error=callback_failed', request.url)
-    )
+    const errorHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Strava Connection Error</title>
+        </head>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'strava-oauth-error',
+                error: 'callback_failed'
+              }, window.location.origin);
+              window.close();
+            } else {
+              window.location.href = '/settings?strava=error&error=callback_failed';
+            }
+          </script>
+        </body>
+      </html>
+    `
+    return new NextResponse(errorHtml, {
+      headers: { 'Content-Type': 'text/html' },
+    })
   }
 }

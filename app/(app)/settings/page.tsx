@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { useStravaStatus, useStravaAuthorize, useStravaDisconnect, useStravaSync } from '@/hooks/use-fitness'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { timezones } from '@/lib/utils'
 import { 
@@ -272,11 +273,68 @@ function FitnessIntegrationsCard() {
   const disconnectMutation = useStravaDisconnect()
   const syncMutation = useStravaSync()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
 
   const handleStravaConnect = async () => {
     try {
       const authUrl = await authorizeMutation.mutateAsync()
-      window.location.href = authUrl
+      // Open Strava OAuth in a new tab
+      const width = 600
+      const height = 700
+      const left = (window.screen.width - width) / 2
+      const top = (window.screen.height - height) / 2
+      
+      const popup = window.open(
+        authUrl,
+        'strava-oauth',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      )
+
+      if (!popup) {
+        toast({
+          title: 'Popup blocked',
+          description: 'Please allow popups for this site to connect Strava',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      // Listen for messages from the OAuth callback
+      const messageListener = (event: MessageEvent) => {
+        // Verify origin for security
+        if (event.origin !== window.location.origin) return
+
+        if (event.data.type === 'strava-oauth-success') {
+          popup.close()
+          window.removeEventListener('message', messageListener)
+          clearInterval(checkClosed)
+          authorizeMutation.reset()
+          // Invalidate queries to refresh the status
+          queryClient.invalidateQueries({ queryKey: ['strava-status'] })
+          toast({
+            title: 'Strava connected!',
+            variant: 'success',
+          })
+        } else if (event.data.type === 'strava-oauth-error') {
+          popup.close()
+          window.removeEventListener('message', messageListener)
+          toast({
+            title: 'Failed to connect Strava',
+            description: event.data.error || 'An error occurred',
+            variant: 'destructive',
+          })
+        }
+      }
+
+      window.addEventListener('message', messageListener)
+
+      // Check if popup was closed manually
+      let checkClosed: NodeJS.Timeout | null = setInterval(() => {
+        if (popup.closed) {
+          if (checkClosed) clearInterval(checkClosed)
+          window.removeEventListener('message', messageListener)
+        }
+      }, 1000)
     } catch (error) {
       toast({
         title: 'Failed to connect to Strava',
