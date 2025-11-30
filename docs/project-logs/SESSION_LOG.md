@@ -834,3 +834,73 @@ export function createClient() {
 
 **Result:** ✅ All requested features implemented and working correctly
 
+---
+
+### Prompt 4: Fix Build Error
+
+> [Netlify build error showing TypeScript error in OAuth popup interval handling]
+
+**What was done:**
+
+1. **Identified Issue:**
+   - TypeScript error: `clearInterval(checkClosed)` where `checkClosed` was typed as `NodeJS.Timeout | null`
+   - `clearInterval` doesn't accept `null` type
+
+2. **Fixed Type Error:**
+   - Removed nullable type declaration for `checkClosed`
+   - Added null checks before clearing interval in both success and error handlers
+   - Ensured interval is properly cleaned up in all cases
+
+**Files changed:**
+- `app/(app)/settings/page.tsx` - Fixed interval type handling
+
+**Result:** ✅ Build now succeeds, TypeScript error resolved
+
+---
+
+### Prompt 5: Popup Close and Button State Update
+
+> the pop up should close and the state of the button 'connect' should change
+
+**What was done:**
+
+1. **Fixed Popup Closing:**
+   - Ensured popup closes properly in all success/error cases
+   - Added checks for `popup && !popup.closed` before closing
+   - Fixed scope issue with `checkClosed` interval variable
+
+2. **Fixed Button State Update:**
+   - Added `refetchQueries()` in addition to `invalidateQueries()` to immediately refresh status
+   - Added 500ms delay before refetching to allow backend to process connection
+   - Button now properly changes from "Connect" to "Disconnect" after OAuth completes
+
+3. **Improved Cleanup:**
+   - Properly declared `checkClosed` before message listener for correct scope
+   - Ensured all event listeners and intervals are cleaned up
+
+**Files changed:**
+- `app/(app)/settings/page.tsx` - Enhanced OAuth flow with proper popup closing and state updates
+
+**Result:** ✅ Popup closes automatically and button state updates correctly after OAuth
+
+---
+
+### Summary of Recent Fixes
+
+**Key Improvements:**
+- ✅ Fixed TypeScript build error for Netlify deployment
+- ✅ Ensured popup closes properly after OAuth
+- ✅ Button state now updates immediately after connection
+- ✅ Improved cleanup of intervals and event listeners
+
+**Technical Details:**
+- Fixed interval type handling to prevent TypeScript errors
+- Added immediate query refetch for real-time UI updates
+- Improved popup lifecycle management
+- Better error handling and cleanup
+
+**Files Modified:**
+- `app/(app)/settings/page.tsx` - OAuth popup flow improvements
+
+**Result:** ✅ All OAuth flow issues resolved, popup closes and UI updates correctly
+
