@@ -70,7 +70,9 @@ This document describes the technical architecture and key decisions made in the
 ├── supabase/
 │   ├── migrations/              # SQL migrations
 │   ├── functions/               # Edge Functions
-│   │   └── send-reminders/      # Reminder function
+│   │   ├── send-reminders/      # Reminder function
+│   │   ├── strava-oauth/        # Strava OAuth & manual sync
+│   │   └── strava-auto-sync/    # Automatic hourly sync for all users
 │   └── config.toml              # Supabase config
 ├── docs/
 │   └── project-logs/            # This documentation
@@ -189,16 +191,17 @@ All tables have RLS enabled:
 ### Data Flow
 
 ```
-User Action → OAuth Auth → Token Storage → Activity Sync → Automatic Unit Matching → Task Auto-Population
+User Action → OAuth Auth → Token Storage → Automatic Hourly Sync → Activity Storage → Automatic Unit Matching → Task Auto-Population
 ```
 
 1. **User connects fitness account** via settings page
 2. **OAuth flow** exchanges code for access/refresh tokens
 3. **Tokens stored securely** in Supabase with encryption
-4. **Background sync** fetches recent activities (last 30 days)
-5. **Automatic matching** based on task units (minutes, steps, distance, etc.)
-6. **Check-in auto-populates** tasks with compatible units
-7. **Manual override** always available for adjustments
+4. **Automatic hourly sync** (via cron) fetches recent activities (last 30 days) for all active connections
+5. **Manual sync** also available via Settings page for immediate updates
+6. **Automatic matching** based on task units (minutes, steps, distance, etc.)
+7. **Check-in auto-populates** tasks with compatible units
+8. **Manual override** always available for adjustments
 
 ### Security Model
 

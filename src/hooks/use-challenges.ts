@@ -2,92 +2,189 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthContext } from '@/components/providers'
 import type { Challenge, ChallengeWithTasks, Task, DailyEntry, TaskCompletion } from '@/types'
-import { generateInviteToken } from '@/lib/utils'
+import { generateInviteToken, calculateStreak } from '@/lib/utils'
 
 const supabase = createClient()
 
-// Fetch user's challenges
+// Types for optimized challenge data with stats
+export interface ChallengeWithStats extends ChallengeWithTasks {
+  stats?: {
+    completed_days: number
+    current_streak: number
+    longest_streak: number
+    completion_percentage: number
+    days_remaining: number
+  }
+}
+
+// Fetch user's challenges with parallel fetching
 export function useChallenges() {
+  const { user } = useAuthContext()
+  
   return useQuery({
-    queryKey: ['challenges'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+    queryKey: ['challenges', user?.id],
+    queryFn: async (): Promise<ChallengeWithTasks[]> => {
       if (!user) throw new Error('Not authenticated')
 
-      // Get challenges user owns (without nested tasks to avoid RLS recursion)
-      const { data: ownedChallenges, error: ownedError } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (ownedError) {
-        console.error('Error fetching owned challenges:', ownedError)
-        throw ownedError
-      }
-
-      // Fetch tasks separately for each challenge to avoid RLS recursion
-      if (ownedChallenges && ownedChallenges.length > 0) {
-        const challengeIds = ownedChallenges.map(c => c.id)
-        const { data: tasks, error: tasksError } = await supabase
-          .from('tasks')
+      // PARALLEL FETCH: Get owned and member challenges simultaneously
+      const [ownedResult, memberResult] = await Promise.all([
+        supabase
+          .from('challenges')
           .select('*')
-          .in('challenge_id', challengeIds)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('challenge_members')
+          .select('challenge:challenges (*)')
+          .eq('user_id', user.id)
+      ])
 
-        if (tasksError) {
-          console.error('Error fetching tasks:', tasksError)
-          throw tasksError
-        }
-
-        // Attach tasks to their challenges
-        ownedChallenges.forEach(challenge => {
-          (challenge as ChallengeWithTasks).tasks = tasks?.filter(t => t.challenge_id === challenge.id) || []
-        })
+      if (ownedResult.error) {
+        console.error('Error fetching owned challenges:', ownedResult.error)
+        throw ownedResult.error
       }
+      if (memberResult.error) throw memberResult.error
 
-      // Get challenges user is a member of (without nested tasks)
-      const { data: memberChallenges, error: memberError } = await supabase
-        .from('challenge_members')
-        .select(`
-          challenge:challenges (*)
-        `)
-        .eq('user_id', user.id)
-
-      if (memberError) throw memberError
-
-      const joinedChallenges = (memberChallenges
+      const ownedChallenges = ownedResult.data || []
+      const joinedChallenges = (memberResult.data
         ?.map((m: any) => m.challenge as Challenge)
         .filter(Boolean) || []) as Challenge[]
 
-      // Fetch tasks separately for member challenges
-      if (joinedChallenges.length > 0) {
-        const memberChallengeIds = joinedChallenges.map(c => c.id)
-        const { data: memberTasks, error: memberTasksError } = await supabase
-          .from('tasks')
-          .select('*')
-          .in('challenge_id', memberChallengeIds)
+      // Collect all challenge IDs for batch task fetch
+      const allChallengeIds = [
+        ...ownedChallenges.map(c => c.id),
+        ...joinedChallenges.map(c => c.id)
+      ]
 
-        if (memberTasksError) {
-          console.error('Error fetching member tasks:', memberTasksError)
-          throw memberTasksError
-        }
-
-        // Attach tasks to their challenges
-        joinedChallenges.forEach(challenge => {
-          (challenge as ChallengeWithTasks).tasks = memberTasks?.filter(t => t.challenge_id === challenge.id) || []
-        })
+      if (allChallengeIds.length === 0) {
+        return []
       }
 
-      const joinedChallengesWithTasks = joinedChallenges as ChallengeWithTasks[]
+      // SINGLE QUERY: Fetch all tasks for all challenges at once
+      const { data: allTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*')
+        .in('challenge_id', allChallengeIds)
 
-      return [...(ownedChallenges || []), ...joinedChallengesWithTasks] as ChallengeWithTasks[]
+      if (tasksError) {
+        console.error('Error fetching tasks:', tasksError)
+        throw tasksError
+      }
+
+      // Attach tasks to their respective challenges
+      const attachTasks = (challenges: Challenge[]): ChallengeWithTasks[] => {
+        return challenges.map(challenge => ({
+          ...challenge,
+          tasks: allTasks?.filter(t => t.challenge_id === challenge.id) || []
+        }))
+      }
+
+      return [
+        ...attachTasks(ownedChallenges),
+        ...attachTasks(joinedChallenges)
+      ]
     },
+    enabled: !!user?.id,
+  })
+}
+
+// Optimized: Fetch challenges WITH their stats in a single batch
+export function useChallengesWithStats() {
+  const { user } = useAuthContext()
+  
+  return useQuery({
+    queryKey: ['challenges-with-stats', user?.id],
+    queryFn: async (): Promise<ChallengeWithStats[]> => {
+      if (!user) throw new Error('Not authenticated')
+
+      // PARALLEL FETCH: challenges, tasks, and daily entries all at once
+      const [challengesResult, memberResult] = await Promise.all([
+        supabase
+          .from('challenges')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('challenge_members')
+          .select('challenge:challenges (*)')
+          .eq('user_id', user.id)
+      ])
+
+      if (challengesResult.error) throw challengesResult.error
+      if (memberResult.error) throw memberResult.error
+
+      const ownedChallenges = challengesResult.data || []
+      const joinedChallenges = (memberResult.data
+        ?.map((m: any) => m.challenge as Challenge)
+        .filter(Boolean) || []) as Challenge[]
+
+      const allChallenges = [...ownedChallenges, ...joinedChallenges]
+      const allChallengeIds = allChallenges.map(c => c.id)
+
+      if (allChallengeIds.length === 0) {
+        return []
+      }
+
+      // PARALLEL FETCH: tasks and daily entries for ALL challenges
+      const [tasksResult, entriesResult] = await Promise.all([
+        supabase
+          .from('tasks')
+          .select('*')
+          .in('challenge_id', allChallengeIds),
+        supabase
+          .from('daily_entries')
+          .select('challenge_id, date, is_complete')
+          .in('challenge_id', allChallengeIds)
+          .eq('user_id', user.id)
+      ])
+
+      if (tasksResult.error) throw tasksResult.error
+      if (entriesResult.error) throw entriesResult.error
+
+      const allTasks = tasksResult.data || []
+      const allEntries = entriesResult.data || []
+
+      // Build challenges with stats
+      return allChallenges.map(challenge => {
+        const tasks = allTasks.filter(t => t.challenge_id === challenge.id)
+        const entries = allEntries.filter(e => e.challenge_id === challenge.id)
+        const completedDates = entries.filter(e => e.is_complete).map(e => e.date)
+
+        // Calculate stats
+        const startDate = new Date(challenge.start_date)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+        const totalDays = challenge.duration_days
+        const elapsedDays = Math.min(Math.max(daysSinceStart, 0), totalDays)
+        const completedDays = completedDates.length
+        const daysRemaining = Math.max(totalDays - elapsedDays, 0)
+        const { current, longest } = calculateStreak(completedDates, challenge.start_date)
+
+        return {
+          ...challenge,
+          tasks,
+          stats: {
+            completed_days: completedDays,
+            current_streak: current,
+            longest_streak: longest,
+            completion_percentage: elapsedDays > 0 ? Math.round((completedDays / elapsedDays) * 100) : 0,
+            days_remaining: daysRemaining,
+          }
+        }
+      })
+    },
+    enabled: !!user?.id,
   })
 }
 
 // Fetch single challenge with tasks
 export function useChallenge(id: string) {
+  const { user } = useAuthContext()
+  
   return useQuery({
     queryKey: ['challenge', id],
     queryFn: async () => {
@@ -103,13 +200,14 @@ export function useChallenge(id: string) {
       if (error) throw error
       return data as ChallengeWithTasks
     },
-    enabled: !!id,
+    enabled: !!id && !!user,
   })
 }
 
 // Create a new challenge
 export function useCreateChallenge() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (data: {
@@ -118,7 +216,6 @@ export function useCreateChallenge() {
       duration_days: number
       tasks: Omit<Task, 'id' | 'challenge_id' | 'created_at'>[]
     }) => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
       const inviteToken = generateInviteToken()
@@ -154,6 +251,7 @@ export function useCreateChallenge() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challenges'] })
+      queryClient.invalidateQueries({ queryKey: ['challenges-with-stats'] })
     },
   })
 }
@@ -208,10 +306,10 @@ export function useRegenerateInviteToken() {
 // Join challenge via invite token
 export function useJoinChallenge() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (inviteToken: string) => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
       // Find challenge by invite token
@@ -254,16 +352,18 @@ export function useJoinChallenge() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challenges'] })
+      queryClient.invalidateQueries({ queryKey: ['challenges-with-stats'] })
     },
   })
 }
 
 // Fetch daily entry for a specific date
 export function useDailyEntry(challengeId: string, date: string) {
+  const { user } = useAuthContext()
+  
   return useQuery({
-    queryKey: ['daily-entry', challengeId, date],
+    queryKey: ['daily-entry', challengeId, date, user?.id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
       const { data, error } = await supabase
@@ -280,13 +380,14 @@ export function useDailyEntry(challengeId: string, date: string) {
       if (error && error.code !== 'PGRST116') throw error
       return data
     },
-    enabled: !!challengeId && !!date,
+    enabled: !!challengeId && !!date && !!user,
   })
 }
 
 // Save daily entry
 export function useSaveDailyEntry() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (data: {
@@ -300,7 +401,6 @@ export function useSaveDailyEntry() {
         is_completed: boolean
       }[]
     }) => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
       // Upsert daily entry
@@ -345,16 +445,18 @@ export function useSaveDailyEntry() {
       queryClient.invalidateQueries({ queryKey: ['daily-entry', data.challenge_id, data.date] })
       queryClient.invalidateQueries({ queryKey: ['daily-entries', data.challenge_id] })
       queryClient.invalidateQueries({ queryKey: ['progress-stats', data.challenge_id] })
+      queryClient.invalidateQueries({ queryKey: ['challenges-with-stats'] })
     },
   })
 }
 
 // Fetch all daily entries for a challenge
 export function useDailyEntries(challengeId: string) {
+  const { user } = useAuthContext()
+  
   return useQuery({
-    queryKey: ['daily-entries', challengeId],
+    queryKey: ['daily-entries', challengeId, user?.id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
       const { data, error } = await supabase
@@ -370,17 +472,16 @@ export function useDailyEntries(challengeId: string) {
       if (error) throw error
       return data
     },
-    enabled: !!challengeId,
+    enabled: !!challengeId && !!user,
   })
 }
 
-// Upload image to storage
-export async function uploadProgressImage(file: File): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
+// Upload image to storage - requires userId to be passed
+export async function uploadProgressImage(file: File, userId: string): Promise<string> {
+  if (!userId) throw new Error('Not authenticated')
 
   const fileExt = file.name.split('.').pop()
-  const fileName = `${user.id}/${Date.now()}.${fileExt}`
+  const fileName = `${userId}/${Date.now()}.${fileExt}`
 
   const { error: uploadError } = await supabase.storage
     .from('progress-photos')
