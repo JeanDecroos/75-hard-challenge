@@ -23,6 +23,8 @@ export function useCreateTask() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['challenge', data.challenge_id] })
+      queryClient.invalidateQueries({ queryKey: ['challenges'] })
+      queryClient.invalidateQueries({ queryKey: ['challenges-with-stats'] })
     },
   })
 }

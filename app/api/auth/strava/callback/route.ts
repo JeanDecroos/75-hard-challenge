@@ -8,6 +8,10 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
 
   if (error) {
+    // Escape error parameter to prevent XSS
+    const escapedError = JSON.stringify(error)
+    const urlEncodedError = encodeURIComponent(error)
+    
     // If opened in a popup, send error message to parent window
     const errorHtml = `
       <!DOCTYPE html>
@@ -20,11 +24,11 @@ export async function GET(request: NextRequest) {
             if (window.opener) {
               window.opener.postMessage({
                 type: 'strava-oauth-error',
-                error: '${error}'
+                error: ${escapedError}
               }, window.location.origin);
               window.close();
             } else {
-              window.location.href = '/settings?strava=error&error=${error}';
+              window.location.href = '/settings?strava=error&error=${urlEncodedError}';
             }
           </script>
         </body>

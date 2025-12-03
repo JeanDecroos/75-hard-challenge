@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useChallenges } from '@/hooks/use-challenges'
-import { useProgressStats } from '@/hooks/use-progress'
+import { useChallengesWithStats, type ChallengeWithStats } from '@/hooks/use-challenges'
 import { 
   Flame, 
   Calendar, 
@@ -16,13 +15,13 @@ import {
   TrendingUp,
   ChevronRight,
   Plus,
-  CheckCircle2,
-  XCircle
+  CheckCircle2
 } from 'lucide-react'
-import { getLocalDateString, getDayNumber, formatShortDate } from '@/lib/utils'
+import { getLocalDateString, getDayNumber } from '@/lib/utils'
 
 export default function DashboardPage() {
-  const { data: challenges, isLoading } = useChallenges()
+  // OPTIMIZED: Single query fetches ALL challenges with stats
+  const { data: challenges, isLoading } = useChallengesWithStats()
 
   if (isLoading) {
     return <DashboardSkeleton />
@@ -63,25 +62,12 @@ export default function DashboardPage() {
   )
 }
 
-function ChallengeCard({ challenge }: { challenge: { id: string; name: string; start_date: string; duration_days: number } }) {
-  const { data: stats, isLoading } = useProgressStats(challenge.id)
+// OPTIMIZED: Stats are now included in the challenge data - no separate fetch!
+function ChallengeCard({ challenge }: { challenge: ChallengeWithStats }) {
   const today = getLocalDateString()
   const dayNumber = getDayNumber(challenge.start_date, today)
   const isActive = dayNumber > 0 && dayNumber <= challenge.duration_days
-
-  if (isLoading) {
-    return (
-      <Card className="glass-card">
-        <CardContent className="p-6">
-          <div className="space-y-4">
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-8 w-full" />
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+  const stats = challenge.stats
 
   return (
     <Card className="glass-card hover:bg-white/10 transition-colors">
@@ -243,4 +229,3 @@ function DashboardSkeleton() {
     </div>
   )
 }
-

@@ -2,43 +2,39 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthContext } from '@/components/providers'
 import type { ProgressStats, CalendarDay, ChallengeWithTasks } from '@/types'
 import { calculateStreak, isToday, isFutureDate, getLocalDateString } from '@/lib/utils'
 
 const supabase = createClient()
 
 export function useProgressStats(challengeId: string) {
+  const { user } = useAuthContext()
+  
   return useQuery({
-    queryKey: ['progress-stats', challengeId],
+    queryKey: ['progress-stats', challengeId, user?.id],
     queryFn: async (): Promise<ProgressStats> => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      // Get challenge details
-      const { data: challenge, error: challengeError } = await supabase
-        .from('challenges')
-        .select(`
-          *,
-          tasks (*)
-        `)
-        .eq('id', challengeId)
-        .single()
+      // PARALLEL FETCH: Get challenge and entries simultaneously
+      const [challengeResult, entriesResult] = await Promise.all([
+        supabase
+          .from('challenges')
+          .select(`*, tasks (*)`)
+          .eq('id', challengeId)
+          .single(),
+        supabase
+          .from('daily_entries')
+          .select(`*, task_completions (*)`)
+          .eq('challenge_id', challengeId)
+          .eq('user_id', user.id)
+      ])
 
-      if (challengeError) throw challengeError
+      if (challengeResult.error) throw challengeResult.error
+      if (entriesResult.error) throw entriesResult.error
 
-      // Get all daily entries
-      const { data: entries, error: entriesError } = await supabase
-        .from('daily_entries')
-        .select(`
-          *,
-          task_completions (*)
-        `)
-        .eq('challenge_id', challengeId)
-        .eq('user_id', user.id)
-
-      if (entriesError) throw entriesError
-
-      const typedChallenge = challenge as ChallengeWithTasks
+      const typedChallenge = challengeResult.data as ChallengeWithTasks
+      const entries = entriesResult.data || []
       const tasks = typedChallenge.tasks || []
       const completedDates = entries
         ?.filter(e => e.is_complete)
@@ -92,37 +88,40 @@ export function useProgressStats(challengeId: string) {
         task_stats: taskStats,
       }
     },
-    enabled: !!challengeId,
+    enabled: !!challengeId && !!user,
   })
 }
 
 export function useCalendarDays(challengeId: string) {
+  const { user } = useAuthContext()
+  
   return useQuery({
-    queryKey: ['calendar-days', challengeId],
+    queryKey: ['calendar-days', challengeId, user?.id],
     queryFn: async (): Promise<CalendarDay[]> => {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      // Get challenge details
-      const { data: challenge, error: challengeError } = await supabase
-        .from('challenges')
-        .select('start_date, duration_days')
-        .eq('id', challengeId)
-        .single()
+      // PARALLEL FETCH: Get challenge and entries simultaneously
+      const [challengeResult, entriesResult] = await Promise.all([
+        supabase
+          .from('challenges')
+          .select('start_date, duration_days')
+          .eq('id', challengeId)
+          .single(),
+        supabase
+          .from('daily_entries')
+          .select('date, is_complete')
+          .eq('challenge_id', challengeId)
+          .eq('user_id', user.id)
+      ])
 
-      if (challengeError) throw challengeError
+      if (challengeResult.error) throw challengeResult.error
+      if (entriesResult.error) throw entriesResult.error
 
-      // Get all daily entries
-      const { data: entries, error: entriesError } = await supabase
-        .from('daily_entries')
-        .select('date, is_complete')
-        .eq('challenge_id', challengeId)
-        .eq('user_id', user.id)
-
-      if (entriesError) throw entriesError
+      const challenge = challengeResult.data
+      const entries = entriesResult.data || []
 
       const completedDatesSet = new Set(
-        entries?.filter(e => e.is_complete).map(e => e.date) || []
+        entries.filter(e => e.is_complete).map(e => e.date)
       )
 
       const startDate = new Date(challenge.start_date)
@@ -145,15 +144,18 @@ export function useCalendarDays(challengeId: string) {
 
       return days
     },
-    enabled: !!challengeId,
+    enabled: !!challengeId && !!user,
   })
 }
 
 export function useChallengeMembers(challengeId: string) {
+  const { user } = useAuthContext()
+  
   return useQuery({
     queryKey: ['challenge-members', challengeId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Get members with profiles
+      const { data: members, error: membersError } = await supabase
         .from('challenge_members')
         .select(`
           *,
@@ -164,33 +166,38 @@ export function useChallengeMembers(challengeId: string) {
         `)
         .eq('challenge_id', challengeId)
 
-      if (error) throw error
+      if (membersError) throw membersError
+      if (!members || members.length === 0) return []
 
-      // Get daily entries for each member
-      const memberProgress = await Promise.all(
-        data.map(async (member) => {
-          const { data: entries } = await supabase
-            .from('daily_entries')
-            .select('date, is_complete')
-            .eq('challenge_id', challengeId)
-            .eq('user_id', member.user_id)
+      // Get all member user IDs
+      const memberUserIds = members.map(m => m.user_id)
 
-          const completedDates = entries?.filter(e => e.is_complete).map(e => e.date) || []
-          const { current } = calculateStreak(completedDates, new Date().toISOString())
+      // BATCH FETCH: Get all daily entries for all members in one query
+      const { data: allEntries, error: entriesError } = await supabase
+        .from('daily_entries')
+        .select('user_id, date, is_complete')
+        .eq('challenge_id', challengeId)
+        .in('user_id', memberUserIds)
 
-          return {
-            user_id: member.user_id,
-            display_name: member.profiles?.display_name || 'Anonymous',
-            completed_days: completedDates.length,
-            current_streak: current,
-            joined_at: member.joined_at,
-          }
-        })
-      )
+      if (entriesError) throw entriesError
+
+      // Process member progress from batched data
+      const memberProgress = members.map(member => {
+        const memberEntries = allEntries?.filter(e => e.user_id === member.user_id) || []
+        const completedDates = memberEntries.filter(e => e.is_complete).map(e => e.date)
+        const { current } = calculateStreak(completedDates, new Date().toISOString())
+
+        return {
+          user_id: member.user_id,
+          display_name: member.profiles?.display_name || 'Anonymous',
+          completed_days: completedDates.length,
+          current_streak: current,
+          joined_at: member.joined_at,
+        }
+      })
 
       return memberProgress
     },
-    enabled: !!challengeId,
+    enabled: !!challengeId && !!user,
   })
 }
-

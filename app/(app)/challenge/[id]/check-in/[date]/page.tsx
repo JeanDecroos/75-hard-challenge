@@ -55,7 +55,7 @@ export default function CheckInPage({ params }: PageProps) {
   const [taskCompletions, setTaskCompletions] = useState<Map<string, { value: number; is_completed: boolean }>>(new Map())
 
   // Initialize task completions from existing entry
-  useState(() => {
+  useEffect(() => {
     if (existingEntry?.task_completions) {
       const completions = new Map<string, { value: number; is_completed: boolean }>()
       existingEntry.task_completions.forEach((tc: TaskCompletion) => {
@@ -63,7 +63,7 @@ export default function CheckInPage({ params }: PageProps) {
       })
       setTaskCompletions(completions)
     }
-  })
+  }, [existingEntry])
 
   // Track if we've already auto-populated to avoid infinite loops
   const [hasAutoPopulated, setHasAutoPopulated] = useState(false)
