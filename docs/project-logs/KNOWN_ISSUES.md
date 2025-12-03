@@ -102,6 +102,46 @@ This document tracks known bugs, issues, and planned improvements for the 75 Har
 - React Query caching prevents unnecessary API calls
 - Graceful fallback to manual entry when fitness data unavailable
 
+### Performance Optimizations (Dec 2025)
+
+**Implemented optimizations for faster page loads:**
+
+1. **Centralized Auth Context**
+   - Single auth state management in `Providers` component
+   - Eliminated 4-5 redundant `getUser()` calls per page load
+   - Auth state shared across all hooks via React Context
+
+2. **Optimized React Query Configuration**
+   - `staleTime`: 5 minutes (data doesn't change often)
+   - `gcTime`: 30 minutes (keep cache longer)
+   - `refetchOnMount`: false (use cached data)
+   - `retry`: 1 (fail faster)
+
+3. **Parallel Data Fetching**
+   - `useChallenges`: Fetches owned + member challenges in parallel
+   - `useProgressStats`: Fetches challenge + entries in parallel
+   - `useCalendarDays`: Fetches challenge + entries in parallel
+   - `useChallengeMembers`: Batch fetches all member entries
+
+4. **Optimized Dashboard**
+   - New `useChallengesWithStats` hook fetches ALL data in 2-3 queries
+   - Eliminates N+1 problem (was 1 + N queries, now constant)
+   - Stats calculated client-side from batched data
+
+5. **Database Indexes**
+   - Migration `005_performance_indexes.sql` adds indexes for:
+     - `challenges(user_id)`
+     - `tasks(challenge_id)`
+     - `daily_entries(challenge_id, user_id, date)`
+     - `task_completions(daily_entry_id)`
+     - `challenge_members(challenge_id, user_id)`
+     - `fitness_activities(user_id, start_date)`
+
+**Expected Results:**
+- Auth calls: 5+ → 1
+- Dashboard queries: 6-8+ → 2-3
+- Time to interactive: ~50-70% faster
+
 ---
 
 ## How to Report Issues

@@ -15,12 +15,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
 import { useChallenge, useDailyEntry, useSaveDailyEntry, uploadProgressImage } from '@/hooks/use-challenges'
+import { useAuthContext } from '@/components/providers'
 import { autoPopulateTaskCompletions } from '@/lib/fitness-utils'
 import { useFitnessActivities } from '@/hooks/use-fitness'
 import type { Task, TaskCompletion } from '@/types'
 import { 
   CheckCircle2, 
-  Upload, 
   X, 
   Loader2,
   ImageIcon,
@@ -44,6 +44,7 @@ interface PageProps {
 export default function CheckInPage({ params }: PageProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuthContext()
   const { data: challenge, isLoading: challengeLoading } = useChallenge(params.id)
   const { data: existingEntry, isLoading: entryLoading } = useDailyEntry(params.id, params.date)
   const { data: fitnessActivities, isLoading: activitiesLoading } = useFitnessActivities(params.date)
@@ -132,11 +133,11 @@ export default function CheckInPage({ params }: PageProps) {
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
-    if (!file) return
+    if (!file || !user) return
 
     setUploadingImage(true)
     try {
-      const url = await uploadProgressImage(file)
+      const url = await uploadProgressImage(file, user.id)
       setImageUrl(url)
       toast({
         title: 'Image uploaded!',
@@ -151,7 +152,7 @@ export default function CheckInPage({ params }: PageProps) {
     } finally {
       setUploadingImage(false)
     }
-  }, [toast])
+  }, [toast, user])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
